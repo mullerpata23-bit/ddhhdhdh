@@ -1,20 +1,50 @@
 # Pozice musí v názvu splnit KAŽDOU skupinu (stačí jedno slovo ze skupiny).
 # Položky jsou regulární výrazy; diakritika a velikost písmen se ignorují.
-filters:
-  - ['\bstaz', '\bintern(s|ship)?\b', 'junior', 'trainee', 'absolvent', 'graduate', 'student', 'praktik', 'brigad', 'part.?time']
-  - ['financ', 'ucet', 'account', 'audit', 'controll', 'risk', 'treasury', 'bank', 'invest', 'tax', 'danov', 'fp&a', 'reporting', 'pojist', 'insur', 'kredit', 'credit']
+level: &level ['\bstaz', '\bintern(s|ship)?\b', 'junior', 'trainee', 'absolvent', 'graduate', 'student', 'praktik', 'brigad', 'part.?time']
+field: &field ['financ', 'ucet', 'account', 'audit', 'controll', 'risk', 'treasury', 'bank', 'invest', 'tax', 'danov', 'fp&a', 'reporting', 'pojist', 'insur', 'kredit', 'credit']
+filters: [*level, *field]
 
 # Pozice s těmito slovy v názvu se přeskočí.
 exclude: ['senior', 'manager', 'director', 'head of', 'lead\b', 'vedouci']
 
-# Lokalita se kontroluje jen tam, kde ji zdroj uvádí. Přidej třeba 'praha', 'prague'.
+# Lokalita se kontroluje jen tam, kde ji zdroj uvádí (u typu page se nekontroluje, lokalitu drží odkaz).
 locations: ['brno', 'remote', 'home ?office', 'hybrid']
 
-# Sem přidávej firmy (názvy musí být unikátní; návod je v README).
+# render: true = stránku načte skutečný prohlížeč (web vykresluje nabídky JavaScriptem).
+# filters: [*level] = u firmy stačí stáž/junior/student v názvu, obor se nehlídá.
 sources:
-  # - {name: Firma A, type: greenhouse, board: xyz}
-  # - {name: Firma B, type: lever, company: xyz}
-  # - {name: Firma C, type: smartrecruiters, company: Xyz}
-  # - {name: Firma D, type: workday, host: xyz.wd3.myworkdayjobs.com, tenant: xyz, site: Site, query: intern}
-  # - {name: Firma E, type: page, url: "https://firma.cz/kariera"}
-  # - {name: Google Alert, type: rss, url: "https://www.google.com/alerts/feeds/..."}
+  - name: PKF Apogeo   # v seznamu je i Praha, lokalitu tu hlídat nejde
+    type: page
+    url: "https://www.pkfapogeo.cz/kariera/volne-pozice"
+    filters: [*level]
+  - name: Portiva      # upozorní na každý nový příspěvek se štítkem Pracovní pozice
+    type: page
+    url: "https://www.portiva.cz/stitek/pracovni-pozice/"
+    filters: [['pracovni (pozice|prilezitost)']]
+    exclude: []
+    locations: []
+  - name: Zebra
+    type: page
+    url: "https://zebra.jobs.cz/volne-pozice"
+    render: true
+  - name: KPMG
+    type: page
+    url: "https://kpmg.jobs.cz/?location=M265747&custom_urceno-pro="
+    render: true
+    filters: [*level]
+  - name: PPG
+    type: page
+    url: "https://ppg.jobs.cz/volna-mista?location=M265747&custom_obor=finance"
+    render: true
+    filters: [*level]
+  - name: Cyrrus
+    type: page
+    url: "https://cyrrus.jobs.cz/volne-pozice?f_location=M265747"
+    render: true
+    filters: [*level]
+  - name: Garrett Motion
+    type: page
+    url: "https://jobs.garrettmotion.com/#en/sites/CX_2001/jobs?lastSelectedFacet=TITLES&selectedLocationsFacet=300000026821702&selectedTitlesFacet=BMT"
+    render: true
+    wait: 10
+    filters: [*level]

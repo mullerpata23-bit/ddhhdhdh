@@ -5,7 +5,7 @@ import re
 import unicodedata
 import xml.etree.ElementTree as ET
 from html.parser import HTMLParser
-from urllib.parse import urljoin
+from urllib.parse import parse_qsl, urlencode, urljoin, urlsplit, urlunsplit
 
 import requests
 import yaml
@@ -80,10 +80,52 @@ class Links(HTMLParser):
             self.href = None
 
 
+TRACKING = {"searchid", "rps", "refid", "trackingid", "fbclid", "gclid"}
+
+
+def clean(url):
+    """Odstraní sledovací parametry, aby se ID nabídky neměnilo při každém načtení."""
+    u = urlsplit(url)
+    q = [(k, v) for k, v in parse_qsl(u.query)
+         if not k.lower().startswith("utm_") and k.lower() not in TRACKING]
+    return urlunsplit((u.scheme, u.netloc, u.path, urlencode(q), u.fragment))
+
+
+_pw = {}
+
+
+def rendered_html(url, wait):
+    """Otevře stránku ve skutečném prohlížeči (Playwright), aby se provedl JavaScript."""
+    if "b" not in _pw:
+        from playwright.sync_api import sync_playwright
+        _pw["p"] = sync_playwright().start()
+        _pw["b"] = _pw["p"].chromium.launch()
+    pg = _pw["b"].new_page(user_agent=UA["User-Agent"], locale="cs-CZ")
+    try:
+        pg.goto(url, wait_until="domcontentloaded", timeout=60000)
+        try:
+            pg.wait_for_load_state("networkidle", timeout=20000)
+        except Exception:
+            pass
+        pg.wait_for_timeout(int(wait * 1000))
+        return pg.content()
+    finally:
+        pg.close()
+
+
 def page(s):
+    if s.get("render"):
+        html = rendered_html(s["url"], s.get("wait", 5))
+    else:
+        html = get(s["url"]).content.decode("utf-8", "replace")
     p = Links()
-    p.feed(get(s["url"]).content.decode("utf-8", "replace"))
-    return [(u, t, "", urljoin(s["url"], u)) for u, t in p.out if len(t) > 3]
+    p.feed(html)
+    out = []
+    for u, txt in p.out:
+        if len(txt) > 3:
+            full = clean(urljoin(s["url"], u))
+            out.append((full, txt, "", full))
+    return out
 
 
 def rss(s):
@@ -117,8 +159,6 @@ def notify(title, body="", url=""):
 def main():
     cfg = yaml.safe_load(open("sources.yaml", encoding="utf-8"))
     rx = lambda items: [re.compile(norm(p)) for p in items or []]
-    groups = [rx(g) for g in cfg.get("filters") or []]
-    excl, locs = rx(cfg.get("exclude")), rx(cfg.get("locations"))
     sources = cfg.get("sources") or []
 
     fresh = not os.path.exists(STATE)
@@ -136,6 +176,9 @@ def main():
         print(f"[OK] {s['name']}: načteno {len(jobs)} položek"
               + ("" if jobs else " (0 = stránka nejspíš vykresluje nabídky JavaScriptem, zkus jiný typ zdroje)"))
         first, seen = s["name"] not in state, set(state.get(s["name"], []))
+        pick = lambda k: s[k] if k in s else cfg.get(k)  # nastavení u firmy přebije globální
+        groups = [rx(g) for g in pick("filters") or []]
+        excl, locs = rx(pick("exclude")), rx(pick("locations"))
         for jid, title, loc, url in jobs:
             if jid in seen:
                 continue
@@ -151,10 +194,13 @@ def main():
         state[s["name"]] = sorted(seen)
 
     for name, title, loc, url in new[:10]:
-        notify(f"{name}: {title}", loc or "Nová pozice", url)
+        notify(f"{name}: {title[:100]}", loc or "Nová pozice", url)
     if len(new) > 10:
         notify("Další nové pozice", f"+{len(new) - 10} dalších, viz log v GitHub Actions")
     json.dump(state, open(STATE, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
+    if "b" in _pw:
+        _pw["b"].close()
+        _pw["p"].stop()
 
 
 if __name__ == "__main__":
