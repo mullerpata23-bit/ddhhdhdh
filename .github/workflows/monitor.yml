@@ -17,7 +17,11 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install -r requirements.txt
-      - run: grep -q "render: true" sources.yaml && playwright install --with-deps chromium || true
+      - name: Nainstalovat prohlížeč (jen když je potřeba)
+        run: |
+          if grep -q "render: true" sources.yaml; then
+            playwright install --with-deps chromium
+          fi
       - run: python monitor.py
         env:
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
@@ -28,4 +32,4 @@ jobs:
           git config user.name "hlidac-bot"
           git config user.email "hlidac-bot@users.noreply.github.com"
           git add state.json
-          git diff --cached --quiet || (git commit -m "stav" && git push)
+          git diff --cached --quiet || (git commit -m "stav" && git pull --rebase -q && git push)
